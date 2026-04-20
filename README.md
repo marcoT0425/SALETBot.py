@@ -7,4 +7,5 @@ Stats (easy mode):
 
 Stats (hard mode):
 
-* `SALET`: 8128 (0,124,1036,1014,130,11 6 worst)
+* `SALET`: 8128 (0,124,1036,1014,130,11, 6 worst)
+* `REAST`: 8149 (0,119,1038,1008,135,15, 6 worst)
