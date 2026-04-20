@@ -45,24 +45,16 @@ def get_block_row(pattern):
 # --- 3. THEORETICAL SEARCH ENGINE ---
 def is_hard_mode_valid(guess, prev_guess, pattern):
     if not prev_guess or not pattern: return True
-
-    # 1. Green Check (Must be in same position)
     for i, p in enumerate(pattern):
-        if p == "g" and guess[i] != prev_guess[i]:
-            return False
+        if p == "g" and guess[i] != prev_guess[i]: return False
 
-    # 2. Yellow/Green Count Check (Must contain at least as many of each letter)
-    # This solves the double-letter bug by counting required instances
     required_counts = {}
     for i, p in enumerate(pattern):
         if p in ("g", "y"):
             char = prev_guess[i]
             required_counts[char] = required_counts.get(char, 0) + 1
-
     for char, count in required_counts.items():
-        if guess.count(char) < count:
-            return False
-
+        if guess.count(char) < count: return False
     return True
 
 
@@ -97,6 +89,8 @@ def get_best_sim_move(pool_tuple, is_hard, prev_guess, last_pattern):
 
 def calculate_solve_analytics(candidate, is_hard, current_pool, current_turn):
     total_turns, max_turns, missed = 0, 0, []
+    # stats indices: 0=1s, 1=2s, 2=3s, 3=4s, 4=5s, 5=6s, 6=X
+    stats = [0] * 7
     pool_size = len(current_pool)
 
     for secret in current_pool:
@@ -106,6 +100,7 @@ def calculate_solve_analytics(candidate, is_hard, current_pool, current_turn):
             if p == "ggggg":
                 total_turns += s_t
                 max_turns = max(max_turns, s_t)
+                stats[s_t - 1] += 1
                 break
 
             s_p = [w for w in s_p if get_feedback(w, s_g) == p]
@@ -115,7 +110,11 @@ def calculate_solve_analytics(candidate, is_hard, current_pool, current_turn):
                 res_t = s_t + 1
                 total_turns += res_t
                 max_turns = max(max_turns, res_t)
-                if res_t > 6: missed.append(secret)
+                if res_t > 6:
+                    missed.append(secret)
+                    stats[6] += 1
+                else:
+                    stats[res_t - 1] += 1
                 break
 
             s_t += 1
@@ -123,13 +122,14 @@ def calculate_solve_analytics(candidate, is_hard, current_pool, current_turn):
                 missed.append(secret)
                 total_turns += 7
                 max_turns = 7
+                stats[6] += 1
                 break
 
             s_g = get_best_sim_move(tuple(s_p), is_hard, s_g, p)
 
     win_p = ((pool_size - len(missed)) / pool_size) * 100
     exp = total_turns / pool_size
-    return win_p, exp, max_turns, missed
+    return win_p, exp, max_turns, missed, stats
 
 
 # --- 4. MAIN INTERFACE ---
@@ -168,20 +168,19 @@ def run_solver():
 
             enriched = []
             for i, (w, _) in enumerate(base_recs[:actual_to_analyze], 1):
-                wp, exp, worst, miss = calculate_solve_analytics(w, hard_mode, propers_remaining, turn_count)
-                enriched.append((w, wp, exp, worst, miss))
+                wp, exp, worst, miss, st = calculate_solve_analytics(w, hard_mode, propers_remaining, turn_count)
+                enriched.append((w, wp, exp, worst, miss, st))
                 sys.stdout.write(f"\rProgress: {int((i / actual_to_analyze) * 100)}%")
                 sys.stdout.flush()
 
-            print("\n\n" + f"{'WORD':<10} | {'WIN %':<8} | {'EXPECTANCY'} | {'WORST'} | {'MISSES'}")
-            print("-" * 85)
+            print("\n\n" + f"{'WORD':<10} | {'WIN %':<7} | {'EXP':<7} | {'WORST'} | {'STATS [1,2,3,4,5,6,X]'}")
+            print("-" * 95)
 
             # SORTING: Win% (Desc) -> Expectancy (Asc) -> Worst (Asc)
             enriched.sort(key=lambda x: (-x[1], x[2], x[3]))
 
-            for rw, wp, rg, rwst, rm in enriched[:15]:
-                m_s = ", ".join(rm[:3]).upper() + ("..." if len(rm) > 3 else "") if rm else "-"
-                print(f"{rw.upper():<10} | {wp:<8.1f} | {rg:.4f} turns | {rwst:<5} | {m_s}")
+            for rw, wp, rg, rwst, rm, rst in enriched[:15]:
+                print(f"{rw.upper():<10} | {wp:<7.1f} | {rg:.3f} | {rwst:<5} | {rst}")
             guessing_word = enriched[0][0]
 
         raw_in = input(f"\nPattern for '{guessing_word}': ").lower().strip().split()
