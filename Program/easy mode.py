@@ -8,6 +8,7 @@ from functools import lru_cache
 # --- 1. DATA LOADING ---
 proper_word, word_list, full_dictionary = [], [], []
 
+
 def load_data():
     global proper_word, word_list, full_dictionary
     try:
@@ -18,6 +19,7 @@ def load_data():
         full_dictionary = list(set(proper_word + word_list))
     except FileNotFoundError:
         sys.exit("CRITICAL ERROR: Dictionary files missing.")
+
 
 # --- 2. CORE PATTERN ENGINE ---
 @lru_cache(maxsize=None)
@@ -38,6 +40,7 @@ def get_feedback(secret, guess):
                     break
     return "".join(res)
 
+
 # --- 3. EASY MODE SEARCH ENGINE ---
 @lru_cache(maxsize=200000)
 def get_best_sim_move(pool_tuple, is_hard):
@@ -53,20 +56,21 @@ def get_best_sim_move(pool_tuple, is_hard):
         for secret in pool:
             p = get_feedback(secret, cand)
             pg[p] = pg.get(p, 0) + 1
-        
+
         # Scoring: Entropy + Pool Bonus
         score = len(pg) - (sum(v * v for v in pg.values()) / 100000)
         if cand in pool: score += 0.1
-        
+
         if score > best_score:
             best_score, best_word = score, cand
     return best_word
+
 
 def calculate_solve_analytics(candidate, is_hard, current_pool, current_turn):
     total_turns, max_turns, missed = 0, 0, []
     stats = [0] * 7
     pool_size = len(current_pool)
-    
+
     for secret in current_pool:
         s_p, s_g, s_t = list(current_pool), candidate, current_turn
         while s_t <= 6:
@@ -76,10 +80,10 @@ def calculate_solve_analytics(candidate, is_hard, current_pool, current_turn):
                 max_turns = max(max_turns, s_t)
                 stats[s_t - 1] += 1
                 break
-            
+
             s_p = [w for w in s_p if get_feedback(w, s_g) == p]
             if not s_p: break
-            
+
             if len(s_p) == 1:
                 res_t = s_t + 1
                 total_turns += res_t
@@ -90,7 +94,7 @@ def calculate_solve_analytics(candidate, is_hard, current_pool, current_turn):
                 else:
                     stats[res_t - 1] += 1
                 break
-            
+
             s_t += 1
             if s_t > 6:
                 missed.append(secret)
@@ -98,22 +102,23 @@ def calculate_solve_analytics(candidate, is_hard, current_pool, current_turn):
                 max_turns = 7
                 stats[6] += 1
                 break
-            
+
             # Use Easy Mode Logic (is_hard=False)
             s_g = get_best_sim_move(tuple(s_p), False)
-            
+
     win_p = ((pool_size - len(missed)) / pool_size) * 100
     exp = total_turns / pool_size
     return win_p, exp, max_turns, missed, stats
 
+
 # --- 4. BATCH PLAYTHROUGH (EASY MODE) ---
 def run_benchmark():
     load_data()
-    LIMIT = 100
+    LIMIT = 290
     starter = input("Enter starting word: ").lower().strip()
-    
+
     # Force Easy Mode logic
-    hard_mode = False 
+    hard_mode = False
 
     save_dir = "/Users/marco/PyCharmMiscProject/"
     clean_tree_file = f"{save_dir}reast_clean.txt"
@@ -131,13 +136,13 @@ def run_benchmark():
         while turn <= 6:
             p = get_feedback(secret, curr_word)
             path.append(f"{curr_word}({p})")
-            
+
             if p == "ggggg":
                 global_stats[turn - 1] += 1
                 break
-            
+
             curr_pool = tuple([w for w in curr_pool if get_feedback(w, curr_word) == p])
-            
+
             if len(curr_pool) == 1:
                 turn += 1
                 final_w = curr_pool[0]
@@ -148,13 +153,13 @@ def run_benchmark():
                     global_stats[6] += 1
                 path.append(f"{final_w}(ggggg)")
                 break
-            
+
             turn += 1
             if turn > 6:
                 global_stats[6] += 1
                 break
 
-            state_key = curr_pool # In Easy Mode, state is just the pool
+            state_key = curr_pool  # In Easy Mode, state is just the pool
             if state_key in decision_cache:
                 curr_word = decision_cache[state_key]
             else:
@@ -169,14 +174,14 @@ def run_benchmark():
                     score = len(pg) - (sum(v * v for v in pg.values()) / 100000)
                     if c in curr_pool: score += 0.1
                     base_recs.append((c, score))
-                
+
                 base_recs.sort(key=lambda x: x[1], reverse=True)
 
                 enriched = []
                 for w_cand, _ in base_recs[:LIMIT]:
                     wp, exp, worst, miss, st = calculate_solve_analytics(w_cand, False, list(curr_pool), turn)
                     enriched.append((w_cand, wp, exp, worst, miss, st))
-                
+
                 # Sort: Win% -> Exp -> Worst
                 enriched.sort(key=lambda x: (-x[1], x[2], x[3]))
                 curr_word = enriched[0][0]
@@ -206,6 +211,7 @@ def run_benchmark():
         f.write("\n".join(clean_tree_lines))
     with open(f"{save_dir}summary_{starter}.txt", "w") as f:
         f.write(summary)
+
 
 if __name__ == "__main__":
     run_benchmark()
