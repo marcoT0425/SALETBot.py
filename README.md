@@ -3,9 +3,9 @@ The most optimal Wordle solvers, improved hard mode, python code, assisted with 
 
 Stats (easy mode):
 
-salet:
+```salet:
+Progress: 2315/2315
 
-```Progress: 2315/2315
 1: 0
 2: 78
 3: 1223
@@ -15,4 +15,4 @@ salet:
 X: 0
 
 Average: 3.421
-Total # of guesses: 7920```
+Total # of guesses: 7920
