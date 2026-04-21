@@ -114,7 +114,7 @@ def calculate_solve_analytics(candidate, is_hard, current_pool, current_turn):
 # --- 4. BATCH PLAYTHROUGH (EASY MODE) ---
 def run_benchmark():
     load_data()
-    LIMIT = 290
+    LIMIT = 500
     starter = input("Enter starting word: ").lower().strip()
 
     # Force Easy Mode logic
