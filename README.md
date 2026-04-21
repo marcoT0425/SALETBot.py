@@ -3,7 +3,16 @@ The most optimal Wordle solvers, improved hard mode, python code, assisted with 
 
 Stats (easy mode):
 
-* `SALET`: 7920 (0,78,1223,975,39, 5 worst)
+salet:
 
-Stats (hard mode):
+```Progress: 2315/2315
+1: 0
+2: 78
+3: 1223
+4: 975
+5: 39
+6: 0
+X: 0
 
+Average: 3.421
+Total # of guesses: 7920```
