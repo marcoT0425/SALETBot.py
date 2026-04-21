@@ -1,4 +1,5 @@
 import sys
+import time
 from functools import lru_cache
 
 # --- 1. DATA LOADING ---
@@ -17,182 +18,142 @@ def load_data():
         sys.exit("CRITICAL ERROR: Dictionary files missing.")
 
 
-# --- 2. CORE PATTERN ENGINE ---
+# --- 2. FAST PATTERN ENGINE ---
 @lru_cache(maxsize=None)
 def get_feedback(secret, guess):
     if secret == guess: return "ggggg"
     res, s_list, g_list = ['_'] * 5, list(secret), list(guess)
     for i in range(5):
         if g_list[i] == s_list[i]:
-            res[i] = 'g'
-            s_list[i] = g_list[i] = None
+            res[i], s_list[i], g_list[i] = 'g', None, None
     for i in range(5):
         if g_list[i] is not None:
-            char = g_list[i]
             for j in range(5):
-                if s_list[j] == char:
-                    res[i] = 'y'
-                    s_list[j] = None
+                if s_list[j] == g_list[i]:
+                    res[i], s_list[j] = 'y', None
                     break
     return "".join(res)
 
 
-def get_block_row(pattern):
-    mapping = {'g': '█', 'y': '▒', '_': '░'}
-    return "".join(mapping.get(c, '░') for c in pattern)
+# --- 3. DEEP HIERARCHICAL ANALYSIS ---
+def get_metrics(cand, pool, current_turn):
+    """Excel-style Hierarchy: Rate > Avg > Worst > 5+ Count"""
+    total_guesses = 0
+    worst = 0
+    five_plus = 0
+    solved = 0
+
+    for secret in pool:
+        # Mini-recursive solve for each secret in the sub-pool
+        # To keep benchmark speed viable, we use a cached best-move for turn 3+
+        turns = simulate_solve(secret, cand, pool, current_turn)
+        if turns <= 6:
+            solved += 1
+            total_guesses += turns
+            worst = max(worst, turns)
+            if turns >= 5: five_plus += 1
+        else:
+            total_guesses += 7
+            worst = 7
+            five_plus += 1
+
+    return (solved / len(pool), total_guesses / len(pool), worst, five_plus)
 
 
-# --- 3. THEORETICAL SEARCH ENGINE ---
-def is_hard_mode_valid(guess, prev_guess, pattern):
-    if not prev_guess or not pattern: return True
-    for i, p in enumerate(pattern):
-        if p == "g" and guess[i] != prev_guess[i]: return False
+@lru_cache(maxsize=None)
+def simulate_solve(secret, first_guess, initial_pool_tuple, start_turn):
+    curr_pool = initial_pool_tuple
+    curr_guess = first_guess
+    for turn in range(start_turn, 7):
+        pattern = get_feedback(secret, curr_guess)
+        if pattern == "ggggg": return turn
 
-    required_counts = {}
-    for i, p in enumerate(pattern):
-        if p in ("g", "y"):
-            char = prev_guess[i]
-            required_counts[char] = required_counts.get(char, 0) + 1
-    for char, count in required_counts.items():
-        if guess.count(char) < count: return False
-    return True
+        curr_pool = tuple(w for w in curr_pool if get_feedback(w, curr_guess) == pattern)
+        if len(curr_pool) == 1: return turn + 1
 
-
-@lru_cache(maxsize=200000)
-def get_best_sim_move(pool_tuple, is_hard, prev_guess, last_pattern):
-    """Finds the theoretical best move for a pool to minimize turns."""
-    pool = list(pool_tuple)
-    if len(pool) <= 2: return pool[0]
-
-    candidates = full_dictionary
-    if is_hard:
-        candidates = [c for c in full_dictionary if is_hard_mode_valid(c, prev_guess, last_pattern)]
-
-    best_word = None
-    best_score = -1
-
-    for cand in candidates:
-        pattern_groups = {}
-        for secret in pool:
-            p = get_feedback(secret, cand)
-            pattern_groups[p] = pattern_groups.get(p, 0) + 1
-
-        # Entropy Score
-        score = len(pattern_groups) - (sum(c * c for c in pattern_groups.values()) / 100000)
-        if cand in pool: score += 0.1
-
-        if score > best_score:
-            best_score = score
-            best_word = cand
-    return best_word
+        # Pick next move based on entropy (faster for deep sim)
+        curr_guess = get_fast_move(curr_pool)
+    return 7
 
 
-def calculate_solve_analytics(candidate, is_hard, current_pool, current_turn):
-    total_turns, max_turns, missed = 0, 0, []
-    # stats indices: 0=1s, 1=2s, 2=3s, 3=4s, 4=5s, 5=6s, 6=X
-    stats = [0] * 7
-    pool_size = len(current_pool)
-
-    for secret in current_pool:
-        s_p, s_g, s_t = list(current_pool), candidate, current_turn
-        while s_t <= 6:
-            p = get_feedback(secret, s_g)
-            if p == "ggggg":
-                total_turns += s_t
-                max_turns = max(max_turns, s_t)
-                stats[s_t - 1] += 1
-                break
-
-            s_p = [w for w in s_p if get_feedback(w, s_g) == p]
-            if not s_p: break
-
-            if len(s_p) == 1:
-                res_t = s_t + 1
-                total_turns += res_t
-                max_turns = max(max_turns, res_t)
-                if res_t > 6:
-                    missed.append(secret)
-                    stats[6] += 1
-                else:
-                    stats[res_t - 1] += 1
-                break
-
-            s_t += 1
-            if s_t > 6:
-                missed.append(secret)
-                total_turns += 7
-                max_turns = 7
-                stats[6] += 1
-                break
-
-            s_g = get_best_sim_move(tuple(s_p), is_hard, s_g, p)
-
-    win_p = ((pool_size - len(missed)) / pool_size) * 100
-    exp = total_turns / pool_size
-    return win_p, exp, max_turns, missed, stats
+@lru_cache(maxsize=None)
+def get_fast_move(pool_tuple):
+    # Entropy-only fallback for deep simulation speed
+    best_ent, best_w = -1, pool_tuple[0]
+    for cand in full_dictionary:
+        counts = {}
+        for s in pool_tuple:
+            p = get_feedback(s, cand)
+            counts[p] = counts.get(p, 0) + 1
+        ent = len(counts) - (sum(v * v for v in counts.values()) / 100000)
+        if cand in pool_tuple: ent += 0.1
+        if ent > best_ent:
+            best_ent, best_w = ent, cand
+    return best_w
 
 
-# --- 4. MAIN INTERFACE ---
-def run_solver():
+@lru_cache(maxsize=None)
+def get_best_theoretical_move(pool_tuple, turn):
+    # 1. Get Top 50 Entropy Candidates
+    scored = []
+    for cand in full_dictionary:
+        counts = {}
+        for s in pool_tuple:
+            p = get_feedback(s, cand)
+            counts[p] = counts.get(p, 0) + 1
+        ent = len(counts) - (sum(v * v for v in counts.values()) / 100000)
+        if cand in pool_tuple: ent += 0.1
+        scored.append((cand, ent))
+    scored.sort(key=lambda x: x[1], reverse=True)
+
+    # 2. Strict Hierarchy Sort: Rate (Desc) -> Avg (Asc) -> Worst (Asc) -> 5+ (Asc)
+    final_candidates = []
+    for cand, _ in scored[:50]:
+        metrics = get_metrics(cand, pool_tuple, turn)
+        final_candidates.append((cand, metrics))
+
+    # metrics = (rate, avg, worst, five_plus)
+    # Sort order: -rate (desc), avg (asc), worst (asc), five_plus (asc)
+    final_candidates.sort(key=lambda x: (-x[1][0], x[1][1], x[1][2], x[1][3]))
+    return final_candidates[0][0]
+
+
+# --- 4. CUMULATIVE BENCHMARK ---
+def run_benchmark():
     load_data()
-    LIMIT = 100  # Higher for precision, lower for speed
-    print(f"\nWordle Solver v15.0 (Theoretical Mode)")
-    hard_mode = input("Hard mode? (Y/N): ").lower() == "y"
+    starter = input("Enter Starter (e.g. CRATE): ").lower().strip()
+    global_stats = [0] * 7
 
-    guessing_word = "salet" if hard_mode else "crane"
-    propers_remaining = proper_word.copy()
-    turn_count, last_word_used, pattern_history = 0, "", []
+    for i, secret in enumerate(proper_word):
+        curr_pool = tuple(proper_word)
+        curr_guess = starter
+        path = []
 
-    while True:
-        turn_count += 1
-        print(f"\nCandidates left: {len(propers_remaining)}")
+        for turn in range(1, 7):
+            p = get_feedback(secret, curr_guess)
+            path.append(f"{curr_guess}({p})")
+            if p == "ggggg":
+                global_stats[turn - 1] += 1
+                break
 
-        if turn_count > 1:
-            # Initial broad filter
-            base_recs = []
-            cands = full_dictionary if not hard_mode else [c for c in full_dictionary if
-                                                           is_hard_mode_valid(c, last_word_used,
-                                                                              pattern_history[-1][1])]
-            for c in cands:
-                pg = {}
-                for s in propers_remaining:
-                    p = get_feedback(s, c)
-                    pg[p] = pg.get(p, 0) + 1
-                score = len(pg) - (sum(v * v for v in pg.values()) / 100000)
-                if c in propers_remaining: score += 0.1
-                base_recs.append((c, score))
+            curr_pool = tuple(w for w in curr_pool if get_feedback(w, curr_guess) == p)
+            if len(curr_pool) == 1:
+                t = turn + 1
+                if t <= 6:
+                    global_stats[t - 1] += 1
+                else:
+                    global_stats[6] += 1
+                path.append(f"{curr_pool[0]}(ggggg)")
+                break
 
-            base_recs.sort(key=lambda x: x[1], reverse=True)
-            actual_to_analyze = min(len(base_recs), LIMIT)
-            print(f"Theoretical Analysis of Top {actual_to_analyze}...")
+            if turn == 6:
+                global_stats[6] += 1
+                break
 
-            enriched = []
-            for i, (w, _) in enumerate(base_recs[:actual_to_analyze], 1):
-                wp, exp, worst, miss, st = calculate_solve_analytics(w, hard_mode, propers_remaining, turn_count)
-                enriched.append((w, wp, exp, worst, miss, st))
-                sys.stdout.write(f"\rProgress: {int((i / actual_to_analyze) * 100)}%")
-                sys.stdout.flush()
+            curr_guess = get_best_theoretical_move(curr_pool, turn + 1)
 
-            print("\n\n" + f"{'WORD':<10} | {'WIN %':<7} | {'EXP':<7} | {'WORST'} | {'STATS [1,2,3,4,5,6,X]'}")
-            print("-" * 95)
-
-            # SORTING: Win% (Desc) -> Expectancy (Asc) -> Worst (Asc)
-            enriched.sort(key=lambda x: (-x[1], x[2], x[3]))
-
-            for rw, wp, rg, rwst, rm, rst in enriched[:15]:
-                print(f"{rw.upper():<10} | {wp:<7.1f} | {rg:.3f} | {rwst:<5} | {rst}")
-            guessing_word = enriched[0][0]
-
-        raw_in = input(f"\nPattern for '{guessing_word}': ").lower().strip().split()
-        if not raw_in: continue
-        p = raw_in[1] if len(raw_in) > 1 else raw_in[0]
-        w = raw_in[0] if len(raw_in) > 1 else guessing_word
-
-        pattern_history.append((w, p))
-        last_word_used = w
-        if p == "ggggg": break
-        propers_remaining = [word for word in propers_remaining if get_feedback(word, w) == p]
+        print(f"[{i + 1:04}] {secret.upper():<6} | {' -> '.join(path)}")
 
 
 if __name__ == "__main__":
-    run_solver()
+    run_benchmark()
