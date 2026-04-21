@@ -1,8 +1,5 @@
 import sys
 import time
-import csv
-import json
-import os
 from functools import lru_cache
 
 # --- 1. DATA LOADING ---
@@ -21,196 +18,141 @@ def load_data():
         sys.exit("CRITICAL ERROR: Dictionary files missing.")
 
 
-# --- 2. CORE PATTERN ENGINE ---
+# --- 2. FAST PATTERN ENGINE ---
 @lru_cache(maxsize=None)
 def get_feedback(secret, guess):
     if secret == guess: return "ggggg"
     res, s_list, g_list = ['_'] * 5, list(secret), list(guess)
     for i in range(5):
         if g_list[i] == s_list[i]:
-            res[i] = 'g'
-            s_list[i] = g_list[i] = None
+            res[i], s_list[i], g_list[i] = 'g', None, None
     for i in range(5):
         if g_list[i] is not None:
-            char = g_list[i]
             for j in range(5):
-                if s_list[j] == char:
-                    res[i] = 'y'
-                    s_list[j] = None
+                if s_list[j] == g_list[i]:
+                    res[i], s_list[j] = 'y', None
                     break
     return "".join(res)
 
 
-# --- 3. EASY MODE SEARCH ENGINE ---
-@lru_cache(maxsize=200000)
-def get_best_sim_move(pool_tuple, is_hard):
-    pool = list(pool_tuple)
-    if len(pool) <= 2: return pool[0]
+# --- 3. DEEP HIERARCHICAL ANALYSIS ---
+def get_metrics(cand, pool, current_turn):
+    """Excel-style Hierarchy: Rate > Avg > Worst > 5+ Count"""
+    total_guesses = 0
+    worst = 0
+    five_plus = 0
+    solved = 0
 
-    # In Easy Mode, we evaluate the ENTIRE dictionary for every move
-    candidates = full_dictionary
+    for secret in pool:
+        # Mini-recursive solve for each secret in the sub-pool
+        # To keep benchmark speed viable, we use a cached best-move for turn 3+
+        turns = simulate_solve(secret, cand, pool, current_turn)
+        if turns <= 6:
+            solved += 1
+            total_guesses += turns
+            worst = max(worst, turns)
+            if turns >= 5: five_plus += 1
+        else:
+            total_guesses += 7
+            worst = 7
+            five_plus += 1
 
-    best_word, best_score = None, -1
-    for cand in candidates:
-        pg = {}
-        for secret in pool:
-            p = get_feedback(secret, cand)
-            pg[p] = pg.get(p, 0) + 1
-
-        # Scoring: Entropy + Pool Bonus
-        score = len(pg) - (sum(v * v for v in pg.values()) / 100000)
-        if cand in pool: score += 0.1
-
-        if score > best_score:
-            best_score, best_word = score, cand
-    return best_word
-
-
-def calculate_solve_analytics(candidate, is_hard, current_pool, current_turn):
-    total_turns, max_turns, missed = 0, 0, []
-    stats = [0] * 7
-    pool_size = len(current_pool)
-
-    for secret in current_pool:
-        s_p, s_g, s_t = list(current_pool), candidate, current_turn
-        while s_t <= 6:
-            p = get_feedback(secret, s_g)
-            if p == "ggggg":
-                total_turns += s_t
-                max_turns = max(max_turns, s_t)
-                stats[s_t - 1] += 1
-                break
-
-            s_p = [w for w in s_p if get_feedback(w, s_g) == p]
-            if not s_p: break
-
-            if len(s_p) == 1:
-                res_t = s_t + 1
-                total_turns += res_t
-                max_turns = max(max_turns, res_t)
-                if res_t > 6:
-                    missed.append(secret)
-                    stats[6] += 1
-                else:
-                    stats[res_t - 1] += 1
-                break
-
-            s_t += 1
-            if s_t > 6:
-                missed.append(secret)
-                total_turns += 7
-                max_turns = 7
-                stats[6] += 1
-                break
-
-            # Use Easy Mode Logic (is_hard=False)
-            s_g = get_best_sim_move(tuple(s_p), False)
-
-    win_p = ((pool_size - len(missed)) / pool_size) * 100
-    exp = total_turns / pool_size
-    return win_p, exp, max_turns, missed, stats
+    return (solved / len(pool), total_guesses / len(pool), worst, five_plus)
 
 
-# --- 4. BATCH PLAYTHROUGH (EASY MODE) ---
+@lru_cache(maxsize=None)
+def simulate_solve(secret, first_guess, initial_pool_tuple, start_turn):
+    curr_pool = initial_pool_tuple
+    curr_guess = first_guess
+    for turn in range(start_turn, 7):
+        pattern = get_feedback(secret, curr_guess)
+        if pattern == "ggggg": return turn
+
+        curr_pool = tuple(w for w in curr_pool if get_feedback(w, curr_guess) == pattern)
+        if len(curr_pool) == 1: return turn + 1
+
+        # Pick next move based on entropy (faster for deep sim)
+        curr_guess = get_fast_move(curr_pool)
+    return 7
+
+
+@lru_cache(maxsize=None)
+def get_fast_move(pool_tuple):
+    # Entropy-only fallback for deep simulation speed
+    best_ent, best_w = -1, pool_tuple[0]
+    for cand in full_dictionary:
+        counts = {}
+        for s in pool_tuple:
+            p = get_feedback(s, cand)
+            counts[p] = counts.get(p, 0) + 1
+        ent = len(counts) - (sum(v * v for v in counts.values()) / 100000)
+        if cand in pool_tuple: ent += 0.1
+        if ent > best_ent:
+            best_ent, best_w = ent, cand
+    return best_w
+
+
+@lru_cache(maxsize=None)
+def get_best_theoretical_move(pool_tuple, turn):
+    # 1. Get Top 50 Entropy Candidates
+    scored = []
+    for cand in full_dictionary:
+        counts = {}
+        for s in pool_tuple:
+            p = get_feedback(s, cand)
+            counts[p] = counts.get(p, 0) + 1
+        ent = len(counts) - (sum(v * v for v in counts.values()) / 100000)
+        if cand in pool_tuple: ent += 0.1
+        scored.append((cand, ent))
+    scored.sort(key=lambda x: x[1], reverse=True)
+
+    # 2. Strict Hierarchy Sort: Rate (Desc) -> Avg (Asc) -> Worst (Asc) -> 5+ (Asc)
+    final_candidates = []
+    for cand, _ in scored[:50]:
+        metrics = get_metrics(cand, pool_tuple, turn)
+        final_candidates.append((cand, metrics))
+
+    # metrics = (rate, avg, worst, five_plus)
+    # Sort order: -rate (desc), avg (asc), worst (asc), five_plus (asc)
+    final_candidates.sort(key=lambda x: (-x[1][0], x[1][1], x[1][2], x[1][3]))
+    return final_candidates[0][0]
+
+
+# --- 4. CUMULATIVE BENCHMARK ---
 def run_benchmark():
     load_data()
-    LIMIT = 500
-    starter = input("Enter starting word: ").lower().strip()
+    starter = input("Enter Starter (e.g. CRATE): ").lower().strip()
+    global_stats = [0] * 7
 
-    # Force Easy Mode logic
-    hard_mode = False
+    for i, secret in enumerate(proper_word):
+        curr_pool = tuple(proper_word)
+        curr_guess = starter
+        path = []
 
-    save_dir = "/Users/marco/PyCharmMiscProject/"
-    clean_tree_file = f"{save_dir}reast_clean.txt"
-
-    global_stats, clean_tree_lines = [0] * 7, []
-    decision_cache = {}
-    start_time = time.time()
-
-    print(f"\nStarting fresh 2315 Playthrough for '{starter.upper()}' (Easy Mode)...")
-
-    for i in range(len(proper_word)):
-        secret = proper_word[i]
-        curr_word, curr_pool, turn, path, guess_list = starter, tuple(proper_word), 1, [], [starter]
-
-        while turn <= 6:
-            p = get_feedback(secret, curr_word)
-            path.append(f"{curr_word}({p})")
-
+        for turn in range(1, 7):
+            p = get_feedback(secret, curr_guess)
+            path.append(f"{curr_guess}({p})")
             if p == "ggggg":
                 global_stats[turn - 1] += 1
                 break
 
-            curr_pool = tuple([w for w in curr_pool if get_feedback(w, curr_word) == p])
-
+            curr_pool = tuple(w for w in curr_pool if get_feedback(w, curr_guess) == p)
             if len(curr_pool) == 1:
-                turn += 1
-                final_w = curr_pool[0]
-                guess_list.append(final_w)
-                if turn <= 6:
-                    global_stats[turn - 1] += 1
+                t = turn + 1
+                if t <= 6:
+                    global_stats[t - 1] += 1
                 else:
                     global_stats[6] += 1
-                path.append(f"{final_w}(ggggg)")
+                path.append(f"{curr_pool[0]}(ggggg)")
                 break
 
-            turn += 1
-            if turn > 6:
+            if turn == 6:
                 global_stats[6] += 1
                 break
 
-            state_key = curr_pool  # In Easy Mode, state is just the pool
-            if state_key in decision_cache:
-                curr_word = decision_cache[state_key]
-            else:
-                # In Easy Mode, candidates = EVERYTHING
-                cands = full_dictionary
-                base_recs = []
-                for c in cands:
-                    pg = {}
-                    for s in curr_pool:
-                        pat = get_feedback(s, c)
-                        pg[pat] = pg.get(pat, 0) + 1
-                    score = len(pg) - (sum(v * v for v in pg.values()) / 100000)
-                    if c in curr_pool: score += 0.1
-                    base_recs.append((c, score))
+            curr_guess = get_best_theoretical_move(curr_pool, turn + 1)
 
-                base_recs.sort(key=lambda x: x[1], reverse=True)
-
-                enriched = []
-                for w_cand, _ in base_recs[:LIMIT]:
-                    wp, exp, worst, miss, st = calculate_solve_analytics(w_cand, False, list(curr_pool), turn)
-                    enriched.append((w_cand, wp, exp, worst, miss, st))
-
-                # Sort: Win% -> Exp -> Worst
-                enriched.sort(key=lambda x: (-x[1], x[2], x[3]))
-                curr_word = enriched[0][0]
-                decision_cache[state_key] = curr_word
-
-            guess_list.append(curr_word)
-
-        clean_tree_lines.append(",".join(guess_list))
         print(f"[{i + 1:04}] {secret.upper():<6} | {' -> '.join(path)}")
-
-        if (i + 1) % 50 == 0:
-            avg = (sum((j + 1) * global_stats[j] for j in range(6)) + (global_stats[6] * 7)) / (i + 1)
-            print(f"\n--- Progress: {i + 1}/2315 | Avg: {avg:.4f} | {global_stats} ---\n")
-
-    total_g = sum((j + 1) * global_stats[j] for j in range(6)) + (global_stats[6] * 7)
-    summary = (
-        f"Progress: 2315/2315\n"
-        f"1: {global_stats[0]}\n2: {global_stats[1]}\n3: {global_stats[2]}\n"
-        f"4: {global_stats[3]}\n5: {global_stats[4]}\n6: {global_stats[5]}\n"
-        f"X: {global_stats[6]}\n\n"
-        f"Average: {total_g / 2315:.3f}\n"
-        f"Total # of guesses: {total_g}"
-    )
-
-    print("\n" + "=" * 30 + "\n" + summary + "\n" + "=" * 30)
-    with open(clean_tree_file, "w") as f:
-        f.write("\n".join(clean_tree_lines))
-    with open(f"{save_dir}summary_{starter}.txt", "w") as f:
-        f.write(summary)
 
 
 if __name__ == "__main__":
