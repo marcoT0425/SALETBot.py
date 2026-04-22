@@ -32,4 +32,18 @@ X: 0
 
 Average: 3.422
 Total # of guesses: 7923
+
+crate:
+
+Progress: 2315/2315
+1: 1
+2: 82
+3: 1210
+4: 979
+5: 43
+6: 0
+X: 0
+
+Average: 3.424
+Total # of guesses: 7926
 ```
