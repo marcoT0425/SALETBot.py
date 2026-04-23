@@ -116,4 +116,18 @@ X: 0
 
 Average: 3.431
 Total # of guesses: 7943
+
+carte:
+
+Progress: 2315/2315
+1: 0
+2: 82
+3: 1181
+4: 1019
+5: 32
+6: 1
+X: 0
+
+Average: 3.434
+Total # of guesses: 7949
 ```
