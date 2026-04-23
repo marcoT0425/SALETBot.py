@@ -60,4 +60,18 @@ X: 0
 
 Average: 3.424
 Total # of guesses: 7926
+
+slate:
+
+Progress: 2315/2315
+1: 1
+2: 68
+3: 1242
+4: 957
+5: 45
+6: 2
+X: 0
+
+Average: 3.425
+Total # of guesses: 7928
 ```
