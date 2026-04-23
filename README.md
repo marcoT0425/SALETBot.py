@@ -46,4 +46,18 @@ X: 0
 
 Average: 3.424
 Total # of guesses: 7926
+
+trace:
+
+Progress: 2315/2315
+1: 1
+2: 75
+3: 1226
+4: 968
+5: 45
+6: 0
+X: 0
+
+Average: 3.424
+Total # of guesses: 7926
 ```
