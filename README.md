@@ -102,4 +102,18 @@ X: 0
 
 Average: 3.429
 Total # of guesses: 7937
+
+slane:
+
+Progress: 2315/2315
+1: 0
+2: 64
+3: 1237
+4: 968
+5: 44
+6: 2
+X: 0
+
+Average: 3.431
+Total # of guesses: 7943
 ```
