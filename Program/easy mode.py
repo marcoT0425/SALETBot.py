@@ -110,7 +110,7 @@ def run_cumulative_test():
 
     global_stats = [0] * 7
     playthrough_log = []
-    # MEMOIZATION: Stores the best move found for a specific tuple of remaining candidates
+    clean_output = []  # Added for the requested .csv style output
     best_move_memo = {}
 
     print(f"\n--- Testing {len(proper_word)} words starting with '{start_word}' ---\n")
@@ -128,7 +128,6 @@ def run_cumulative_test():
             turn += 1
             if turn > 6: break
 
-            # MEMOIZATION CHECK
             if current_pool in best_move_memo:
                 next_move = best_move_memo[current_pool]
             else:
@@ -149,10 +148,8 @@ def run_cumulative_test():
                 enriched = []
                 for w, _ in base_recs[:LIMIT]:
                     wp, exp, worst, fpc, ic = calculate_solve_analytics(w, hard_mode, current_pool, turn)
-                    # Data for sorting: Word, Win%, EXP, Worst, 4+ Count, IsCandidate
                     enriched.append((w, wp, exp, worst, fpc, ic))
 
-                # HIERARCHY SORT: Win% (Desc), Exp (Asc), Worst (Asc), Candidate (False first), Alpha
                 enriched.sort(key=lambda x: (-x[1], x[2], x[3], x[5], x[0]))
                 next_move = enriched[0][0]
                 best_move_memo[current_pool] = next_move
@@ -161,13 +158,18 @@ def run_cumulative_test():
 
         res_idx = turn - 1 if turn <= 6 else 6
         global_stats[res_idx] += 1
+
+        # ADDED: Store the comma-separated playthrough line
+        clean_output.append(",".join(history))
+
         current_playthrough = f"{target.upper()}: {' -> '.join(history)} ({'X' if turn > 6 else turn})"
         playthrough_log.append(current_playthrough)
         print(f"[{idx}/{len(proper_word)}] {current_playthrough}")
 
     # --- 4. FILE EXPORT ---
+    # FIXED: Now exports each path as "starter,guess2,target" on its own line
     with open(f"{start_word}_clean.txt", "w") as f:
-        f.write(",".join(proper_word))
+        f.write("\n".join(clean_output))
 
     with open("stats.txt", "w") as f:
         f.write(f"Cumulative Test for: {start_word.upper()}\n")
