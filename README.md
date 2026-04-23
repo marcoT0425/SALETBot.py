@@ -74,4 +74,18 @@ X: 0
 
 Average: 3.425
 Total # of guesses: 7928
+
+crane:
+
+Progress: 2315/2315
+1: 1
+2: 70
+3: 1231
+4: 969
+5: 44
+6: 0
+X: 0
+
+Average: 3.426
+Total # of guesses: 7930
 ```
