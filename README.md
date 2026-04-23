@@ -89,7 +89,7 @@ X: 0
 Average: 3.426
 Total # of guesses: 7930
 
-crane:
+carle:
 
 Progress: 2315/2315
 1: 0
