@@ -145,3 +145,9 @@ X: 0
 Average: 3.434
 Total # of guesses: 7950
 ```
+
+Also tested:
+
+* SLANT 7951 (5 worst)
+* TRICE 7952 (5 worst)
+* LEAST 7954 (6 worst)
