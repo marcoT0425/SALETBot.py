@@ -130,4 +130,18 @@ X: 0
 
 Average: 3.434
 Total # of guesses: 7949
+
+torse:
+
+Progress: 2315/2315
+1: 0
+2: 62
+3: 1233
+4: 973
+5: 47
+6: 0
+X: 0
+
+Average: 3.434
+Total # of guesses: 7950
 ```
