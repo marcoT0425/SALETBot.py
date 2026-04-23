@@ -151,3 +151,5 @@ Also tested:
 * SLANT 7951 (5 worst)
 * TRICE 7952 (5 worst)
 * LEAST 7954 (6 worst)
+
+For more info, please go to https://freshman.dev/wordle/leaderboard/AzpCxOM/marcotoa.
