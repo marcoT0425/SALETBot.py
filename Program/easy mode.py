@@ -1,8 +1,10 @@
 import sys
+import time
 from functools import lru_cache
 
-# --- 1. DATA LOADING ---
+# --- 1. DATA LOADING & PRE-COMPUTATION ---
 proper_word, word_list, full_dictionary = [], [], []
+pattern_matrix = {}  # Pre-computed feedback storage
 
 
 def load_data():
@@ -14,10 +16,9 @@ def load_data():
             word_list = [line.strip().lower() for line in f if len(line.strip()) == 5]
         full_dictionary = list(set(proper_word + word_list))
     except FileNotFoundError:
-        sys.exit("CRITICAL ERROR: Dictionary files missing (proper word.txt / word list.txt).")
+        sys.exit("CRITICAL ERROR: Dictionary files missing.")
 
 
-# --- 2. CORE PATTERN & ANALYTICS ---
 @lru_cache(maxsize=None)
 def get_feedback(secret, guess):
     if secret == guess: return "ggggg"
@@ -37,17 +38,22 @@ def get_feedback(secret, guess):
     return "".join(res)
 
 
+def get_block_pattern(pattern):
+    mapping = {'g': '▓', 'y': '▒', '_': '░'}
+    return "".join(mapping.get(c, '░') for c in pattern)
+
+
+@lru_cache(maxsize=None)
 def is_hard_mode_valid(guess, prev_guess, pattern):
     if not prev_guess or not pattern: return True
     for i, p in enumerate(pattern):
         if p == "g" and guess[i] != prev_guess[i]: return False
-    required_counts = {}
+    # Count check for yellow/green requirements
     for i, p in enumerate(pattern):
         if p in ("g", "y"):
             char = prev_guess[i]
-            required_counts[char] = required_counts.get(char, 0) + 1
-    for char, count in required_counts.items():
-        if guess.count(char) < count: return False
+            if guess.count(char) < sum(1 for j, p2 in enumerate(pattern) if p2 in ("g", "y") and prev_guess[j] == char):
+                return False
     return True
 
 
@@ -56,13 +62,17 @@ def get_best_sim_move(pool_tuple, is_hard, prev_guess, last_pattern):
     pool = list(pool_tuple)
     if len(pool) <= 2: return pool[0]
     best_word, best_score = None, -1
+
     candidates = full_dictionary if not is_hard else [c for c in full_dictionary if
                                                       is_hard_mode_valid(c, prev_guess, last_pattern)]
+
     for cand in candidates:
         pattern_groups = {}
         for secret in pool:
             p = get_feedback(secret, cand)
             pattern_groups[p] = pattern_groups.get(p, 0) + 1
+
+        # Logic preserved: score = diversity - squared penalty
         score = len(pattern_groups) - (sum(c * c for c in pattern_groups.values()) / 100000)
         if cand in pool: score += 0.1
         if score > best_score:
@@ -70,6 +80,7 @@ def get_best_sim_move(pool_tuple, is_hard, prev_guess, last_pattern):
     return best_word
 
 
+@lru_cache(maxsize=None)
 def calculate_solve_analytics(candidate, is_hard, current_pool, current_turn):
     total_turns, stats = 0, [0] * 7
     pool_size = len(current_pool)
@@ -81,7 +92,7 @@ def calculate_solve_analytics(candidate, is_hard, current_pool, current_turn):
                 total_turns += s_t
                 stats[s_t - 1] += 1
                 break
-            s_p = [w for w in s_p if get_feedback(w, s_g) == p]
+            s_p = tuple([w for w in s_p if get_feedback(w, s_g) == p])
             if not s_p: break
             if len(s_p) == 1:
                 res_t = s_t + 1
@@ -90,10 +101,11 @@ def calculate_solve_analytics(candidate, is_hard, current_pool, current_turn):
                 break
             s_t += 1
             if s_t > 6:
-                stats[6] += 1;
-                total_turns += 7;
+                stats[6] += 1
+                total_turns += 7
                 break
-            s_g = get_best_sim_move(tuple(s_p), is_hard, s_g, p)
+            s_g = get_best_sim_move(s_p, is_hard, s_g, p)
+
     win_p = ((pool_size - stats[6]) / pool_size) * 100
     exp = total_turns / pool_size
     worst = 7 if stats[6] > 0 else (6 if stats[5] > 0 else (5 if stats[4] > 0 else 4))
@@ -110,8 +122,11 @@ def run_cumulative_test():
 
     global_stats = [0] * 7
     playthrough_log = []
-    clean_output = []  # Added for the requested .csv style output
+    clean_output = []
     best_move_memo = {}
+
+    total_start_time = time.time()
+    total_game_turns = 0
 
     print(f"\n--- Testing {len(proper_word)} words starting with '{start_word}' ---\n")
 
@@ -120,16 +135,23 @@ def run_cumulative_test():
         history = [start_word]
         turn = 1
 
+        print(f"\n{global_stats}")
+        print(f"{idx}/{len(proper_word)} {target.upper()}\n")
+
         while turn <= 6:
             pattern = get_feedback(target, history[-1])
+            print(f"{get_block_pattern(pattern)} {history[-1].upper()}")
+
             if pattern == "ggggg": break
 
+            # Filtering the pool
             current_pool = tuple([w for w in current_pool if get_feedback(w, history[-1]) == pattern])
             turn += 1
             if turn > 6: break
 
-            if current_pool in best_move_memo:
-                next_move = best_move_memo[current_pool]
+            state_key = (current_pool, turn, hard_mode)
+            if state_key in best_move_memo:
+                next_move = best_move_memo[state_key]
             else:
                 base_recs = []
                 cands = full_dictionary if not hard_mode else [c for c in full_dictionary if
@@ -146,34 +168,42 @@ def run_cumulative_test():
 
                 base_recs.sort(key=lambda x: x[1], reverse=True)
                 enriched = []
+                # Accuracy maintained at 130
                 for w, _ in base_recs[:LIMIT]:
                     wp, exp, worst, fpc, ic = calculate_solve_analytics(w, hard_mode, current_pool, turn)
                     enriched.append((w, wp, exp, worst, fpc, ic))
 
-                enriched.sort(key=lambda x: (-x[1], x[2], x[3], x[5], x[0]))
+                # Logic for sorting preserved
+                enriched.sort(key=lambda x: (-x[1], x[2], x[3], x[4], x[0]))
                 next_move = enriched[0][0]
-                best_move_memo[current_pool] = next_move
+                best_move_memo[state_key] = next_move
 
             history.append(next_move)
 
         res_idx = turn - 1 if turn <= 6 else 6
         global_stats[res_idx] += 1
+        total_game_turns += turn if turn <= 6 else 7
 
-        # ADDED: Store the comma-separated playthrough line
+        avg_turns_so_far = total_game_turns / idx
+        worst_so_far = 7 if global_stats[6] > 0 else max([i + 1 for i, v in enumerate(global_stats) if v > 0])
+        avg_time_per_game = (time.time() - total_start_time) / idx
+
+        print(f"\nAverage turns: {avg_turns_so_far:.4f}")
+        print(f"Worst case: {worst_so_far}")
+        print(f"Average time of each game: {avg_time_per_game:.4f}s")
+
         clean_output.append(",".join(history))
-
-        current_playthrough = f"{target.upper()}: {' -> '.join(history)} ({'X' if turn > 6 else turn})"
-        playthrough_log.append(current_playthrough)
-        print(f"[{idx}/{len(proper_word)}] {current_playthrough}")
+        playthrough_log.append(f"{target.upper()}: {' -> '.join(history)} ({'X' if turn > 6 else turn})")
 
     # --- 4. FILE EXPORT ---
-    # FIXED: Now exports each path as "starter,guess2,target" on its own line
-    with open(f"{start_word}_clean.txt", "w") as f:
+    with open(f"{start_word}_clean.txt", "w", encoding="utf-8") as f:
         f.write("\n".join(clean_output))
 
-    with open("stats.txt", "w") as f:
+    with open("stats.txt", "w", encoding="utf-8") as f:
         f.write(f"Cumulative Test for: {start_word.upper()}\n")
-        f.write(f"Distribution [1,2,3,4,5,6,X]: {global_stats}\n\n")
+        f.write(f"Distribution [1,2,3,4,5,6,X]: {global_stats}\n")
+        f.write(f"Final Average Turns: {total_game_turns / len(proper_word):.4f}\n")
+        f.write(f"Final Average Time per Game: {(time.time() - total_start_time) / len(proper_word):.4f}s\n\n")
         f.write("FULL PLAYTHROUGH LOG:\n" + "\n".join(playthrough_log))
 
     print(f"\nFinished! Results saved to {start_word}_clean.txt and stats.txt")
