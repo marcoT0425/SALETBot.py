@@ -118,7 +118,7 @@ def run_cumulative_test():
     load_data()
     start_word = input("Enter starting word: ").lower().strip()
     hard_mode = input("Hard mode? (Y/N): ").lower() == "y"
-    LIMIT = 130
+    LIMIT = 140
 
     global_stats = [0] * 7
     playthrough_log = []
