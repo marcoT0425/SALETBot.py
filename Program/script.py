@@ -105,7 +105,7 @@ def calculate_solve_analytics(candidate, is_hard, current_pool, current_turn):
 def run_solver():
     load_data()
     LIMIT = 100
-    print(f"\nWordle Solver v15.0 (Theoretical Mode)")
+    print(f"\nWelcome to my Wordle solver!")
     hard_mode = input("Hard mode? (Y/N): ").lower() == "y"
     guessing_word = "salet" if hard_mode else "crane"
     propers_remaining = proper_word.copy()
