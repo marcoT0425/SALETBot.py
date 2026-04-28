@@ -1,159 +1,34 @@
 # SALETBot.py
-The most optimal Wordle solvers, improved hard mode, python code, assisted with Bots.
 
-Stats (easy mode):
+```Welcome to my Wordle solver!
+Hard mode? (Y/N): n
 
-```
-salet:
+Candidates left: 2315
 
-Progress: 2315/2315
+Pattern for 'crane': salet _g___
 
-1: 0
-2: 78
-3: 1223
-4: 975
-5: 39
-6: 0
-X: 0
+Candidates left: 82
+Theoretical Analysis of Top 100...
+Progress: 100%
 
-Average: 3.421
-Total # of guesses: 7920
+WORD    | WIN % | EXP   | WORST | 5+ CT | STATS [1,2,3,4,5,6,X]
+--------|-------|-------|-------|-------|-----------------------
+CORNY   | 100.0 | 3.573 | 5     | 1     | [0, 0, 36, 45, 1, 0, 0]
+CRONY   | 100.0 | 3.598 | 5     | 1     | [0, 0, 34, 47, 1, 0, 0]
+CORNI   | 100.0 | 3.634 | 5     | 2     | [0, 0, 32, 48, 2, 0, 0]
+CURNY   | 100.0 | 3.659 | 5     | 2     | [0, 0, 30, 50, 2, 0, 0]
+CARNY   | 100.0 | 3.683 | 5     | 2     | [0, 0, 28, 52, 2, 0, 0]
+DORMY   | 100.0 | 3.683 | 5     | 2     | [0, 0, 28, 52, 2, 0, 0]
+GYRON   | 100.0 | 3.683 | 5     | 2     | [0, 0, 28, 52, 2, 0, 0]
+MINOR   | 100.0 | 3.683 | 5     | 2     | [0, 0, 28, 52, 2, 0, 0]
+...
 
-reast:
+Pattern for 'corny':```
+(note you may (highly recommended) to change the word lists to filter swear words or slurs for a family-friendly clone or version.)
 
-Progress: 2315/2315
-1: 0
-2: 69
-3: 1241
-4: 963
-5: 42
-6: 0
-X: 0
-
-Average: 3.422
-Total # of guesses: 7923
-
-crate:
-
-Progress: 2315/2315
-1: 1
-2: 82
-3: 1210
-4: 979
-5: 43
-6: 0
-X: 0
-
-Average: 3.424
-Total # of guesses: 7926
-
-trace:
-
-Progress: 2315/2315
-1: 1
-2: 75
-3: 1226
-4: 968
-5: 45
-6: 0
-X: 0
-
-Average: 3.424
-Total # of guesses: 7926
-
-slate:
-
-Progress: 2315/2315
-1: 1
-2: 68
-3: 1242
-4: 957
-5: 45
-6: 2
-X: 0
-
-Average: 3.425
-Total # of guesses: 7928
-
-crane:
-
-Progress: 2315/2315
-1: 1
-2: 70
-3: 1231
-4: 969
-5: 44
-6: 0
-X: 0
-
-Average: 3.426
-Total # of guesses: 7930
-
-carle:
-
-Progress: 2315/2315
-1: 0
-2: 69
-3: 1222
-4: 988
-5: 35
-6: 1
-X: 0
-
-Average: 3.429
-Total # of guesses: 7937
-
-slane:
-
-Progress: 2315/2315
-1: 0
-2: 64
-3: 1237
-4: 968
-5: 44
-6: 2
-X: 0
-
-Average: 3.431
-Total # of guesses: 7943
-
-carte:
-
-Progress: 2315/2315
-1: 0
-2: 82
-3: 1181
-4: 1019
-5: 32
-6: 1
-X: 0
-
-Average: 3.434
-Total # of guesses: 7949
-
-torse:
-
-Progress: 2315/2315
-1: 0
-2: 62
-3: 1233
-4: 973
-5: 47
-6: 0
-X: 0
-
-Average: 3.434
-Total # of guesses: 7950
-```
-
-Also tested:
-
-* SLANT 7951 (5 worst)
-* TRICE 7952 (5 worst)
-* LEAST 7954 (6 worst)
-* TRINE 7956 (5 worst)
-* PRATE 7958 (5 worst)
-* SLART 7962 (5 worst)
-* CARET 7965 (5 worst)
-
-For more info, please go to https://freshman.dev/wordle/leaderboard/AzpCxOM/marcotoa.
+* This is a simple Wordle solver which is assisted with Gemini.
+* Before running the code, make sure that you have already set up the word lists, proper word list and the Python compiler. (PyCharm is highly recommended)
+* If there are no problems, you can run the code. It will manually ask the starting word and te hard mode function. Type "Y" for hard mode and "N" for easy mode.
+* For the typing of the colourings, use "g" for green, "y" for yellow and "_" (underscore) for grey along with the starting word. Type like "salet _g___".
+* EXP means the average guesses left of the remaining words, win % means the winning rate (the puzzles which can be solved within 6 guesses), worst means the worst case, 5+ CT means the words solved in 5 guesses or more (lower is better).
+* This Wordle solver can solve every Wordle puzzle within 5 guesses and with an average of 3.421 guesses.
