@@ -104,7 +104,7 @@
     let wordPool = []; 
     let currentRow = 0; 
     let currentGuess = "";
-    let confirmedLetters = [null, null, null, null, null]; // Tracks Green positions
+    let confirmedLetters = [null, null, null, null, null];
 
     function init() {
         const grid = document.getElementById('grid');
@@ -155,10 +155,20 @@
             originalWordPool = ev.target.result.split(/\s+/).map(w => w.trim().toLowerCase()).filter(w => w.length === 5);
             wordPool = [...originalWordPool];
             document.getElementById('poolCount').innerText = wordPool.length;
-            document.getElementById('debugMsg').innerText = "Words Loaded.";
         };
         reader.readAsText(e.target.files[0]);
     };
+
+    function triggerWin(rowIdx) {
+        const tiles = document.getElementsByClassName('row')[rowIdx].children;
+        [...tiles].forEach((t, i) => {
+            setTimeout(() => {
+                t.dataset.state = 'correct';
+                t.className = 'tile correct win';
+            }, i * 100);
+        });
+        document.getElementById('debugMsg').innerText = "Word Found!";
+    }
 
     function applyWord(rowIdx, word) {
         currentGuess = word.toLowerCase();
@@ -166,7 +176,6 @@
         [...currentGuess].forEach((char, i) => {
             setTimeout(() => {
                 tiles[i].innerText = char;
-                // Default to Correct if already revealed, else Absent
                 let state = (confirmedLetters[i] === char) ? 'correct' : 'absent';
                 tiles[i].dataset.state = state;
                 tiles[i].className = `tile ${state} bounce`;
@@ -178,55 +187,82 @@
         const row = document.getElementsByClassName('row')[currentRow];
         const tiles = Array.from(row.children);
         const pattern = tiles.map(t => t.dataset.state === 'none' ? 'absent' : t.dataset.state);
-        
-        // Update Knowledge base for next row
+
+        // Check if already won (All Green)
+        if (pattern.every(s => s === 'correct')) {
+            triggerWin(currentRow);
+            return;
+        }
+
+        // Update Green Memory
         pattern.forEach((state, i) => {
             if (state === 'correct') confirmedLetters[i] = currentGuess[i];
         });
 
-        const newPool = wordPool.filter(w => {
+        // Robust double letter filtering
+        wordPool = wordPool.filter(w => {
+            const letterCounts = {};
+            const requiredCounts = {};
+            const exactCounts = {};
+
             for (let i = 0; i < 5; i++) {
-                let char = currentGuess[i];
-                if (pattern[i] === 'correct' && w[i] !== char) return false;
-                if (pattern[i] === 'present' && (!w.includes(char) || w[i] === char)) return false;
-                if (pattern[i] === 'absent') {
-                    let guessCount = [...currentGuess].filter((c, idx) => c === char && pattern[idx] !== 'absent').length;
-                    let wordCount = [...w].filter(c => c === char).length;
-                    if (wordCount > guessCount) return false;
+                const char = currentGuess[i];
+                const state = pattern[i];
+
+                if (state === 'correct' || state === 'present') {
+                    requiredCounts[char] = (requiredCounts[char] || 0) + 1;
+                }
+                if (state === 'absent') {
+                    // If this letter also appears as green/yellow elsewhere, 
+                    // the grey tile indicates an EXACT count.
+                    const hasNonGrey = pattern.some((s, idx) => currentGuess[idx] === char && s !== 'absent');
+                    if (hasNonGrey) {
+                        exactCounts[char] = [...currentGuess].filter((c, idx) => c === char && pattern[idx] !== 'absent').length;
+                    } else {
+                        exactCounts[char] = 0;
+                    }
                 }
             }
+
+            for (let i = 0; i < 5; i++) {
+                const char = currentGuess[i];
+                const state = pattern[i];
+                if (state === 'correct' && w[i] !== char) return false;
+                if (state === 'present' && (w[i] === char || !w.includes(char))) return false;
+            }
+
+            for (const char in requiredCounts) {
+                const countInW = [...w].filter(c => c === char).length;
+                if (countInW < requiredCounts[char]) return false;
+            }
+
+            for (const char in exactCounts) {
+                const countInW = [...w].filter(c => c === char).length;
+                if (countInW !== exactCounts[char]) return false;
+            }
+
             return true;
         });
 
-        if (newPool.length === 0) {
-            row.classList.add('shake');
-            document.getElementById('debugMsg').innerText = "No words left!";
-            return;
-        }
-
-        wordPool = newPool;
         document.getElementById('poolCount').innerText = wordPool.length;
 
-        if (wordPool.length === 1) {
-            currentRow++;
-            const winWord = wordPool[0];
-            const winTiles = document.getElementsByClassName('row')[currentRow].children;
-            [...winWord].forEach((c, i) => {
-                setTimeout(() => {
-                    winTiles[i].innerText = c;
-                    winTiles[i].dataset.state = 'correct';
-                    winTiles[i].className = 'tile correct win';
-                }, i * 100);
-            });
+        if (wordPool.length === 0) {
+            row.classList.add('shake');
             return;
         }
 
         currentRow++;
         if (currentRow < 6) {
-            const firstPossible = wordPool[0];
-            const matchingPath = treeData.find(path => path.includes(firstPossible));
-            const nextWord = (matchingPath && matchingPath[currentRow]) ? matchingPath[currentRow] : wordPool[0];
-            applyWord(currentRow, nextWord);
+            if (wordPool.length === 1) {
+                applyWord(currentRow, wordPool[0]);
+                // Automatically show win colors since it's the last word
+                setTimeout(() => triggerWin(currentRow), 600);
+            } else {
+                const firstPossible = wordPool[0];
+                const matchingPath = treeData.find(path => path.includes(firstPossible));
+                const nextWord = (matchingPath && matchingPath[currentRow]) ? matchingPath[currentRow] : wordPool[0];
+                applyWord(currentRow, nextWord);
+            }
         }
     }
 
