@@ -24,6 +24,8 @@ MINOR   | 100.0 | 3.683 | 5     | 2     | [0, 0, 28, 52, 2, 0, 0]
 ...
 
 Pattern for 'corny':```
+
+
 (note you may (highly recommended) to change the word lists to filter swear words or slurs for a family-friendly clone or version.)
 
 * This is a simple Wordle solver which is assisted with Gemini.
