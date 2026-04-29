@@ -95,7 +95,6 @@
     let wordPool = []; 
     let currentRow = 0; 
     let currentGuess = "";
-    let confirmedLetters = [null, null, null, null, null];
 
     function init() {
         const grid = document.getElementById('grid');
@@ -118,7 +117,6 @@
     function cycleTile(tile) {
         const states = ['absent', 'present', 'correct'];
         let currentIdx = states.indexOf(tile.dataset.state);
-        if (currentIdx === -1) currentIdx = 0;
         let nextState = states[(currentIdx + 1) % 3];
         
         tile.classList.add('flip');
@@ -132,7 +130,6 @@
         const reader = new FileReader();
         reader.onload = (ev) => {
             treeData = ev.target.result.split('\n').map(l => l.trim().toLowerCase().split(',')).filter(l => l.length > 0);
-            document.getElementById('debugMsg').innerText = "Tree Loaded.";
             if(treeData.length > 0) applyWord(0, treeData[0][0]);
         };
         reader.readAsText(e.target.files[0]);
@@ -144,24 +141,39 @@
             originalWordPool = ev.target.result.split(/\s+/).map(w => w.trim().toLowerCase()).filter(w => w.length === 5);
             wordPool = [...originalWordPool];
             document.getElementById('poolCount').innerText = wordPool.length;
-            document.getElementById('debugMsg').innerText = "Words Loaded.";
         };
         reader.readAsText(e.target.files[0]);
     };
 
-    function applyWord(rowIdx, word, forceCorrect = false) {
-        currentGuess = (Array.isArray(word) ? word[0] : word).toLowerCase();
+    function applyWord(rowIdx, word) {
+        currentGuess = word.toLowerCase();
         const tiles = document.getElementsByClassName('row')[rowIdx].children;
+        
+        // Logical check: Determine state based on Word Pool consensus
+        const states = Array(5).fill('absent');
+        for (let i = 0; i < 5; i++) {
+            const char = currentGuess[i];
+            // If ALL words in pool have this char at index i -> Correct
+            const allHaveAtPos = wordPool.every(w => w[i] === char);
+            if (allHaveAtPos) {
+                states[i] = 'correct';
+            } else {
+                // If ALL words in pool contain this char somewhere -> Present
+                const allHaveSomewhere = wordPool.every(w => w.includes(char));
+                if (allHaveSomewhere) states[i] = 'present';
+            }
+        }
+
         [...currentGuess].forEach((char, i) => {
             setTimeout(() => {
                 tiles[i].innerText = char;
-                let state = forceCorrect ? 'correct' : (confirmedLetters[i] === char ? 'correct' : 'absent');
-                tiles[i].dataset.state = state;
-                tiles[i].className = `tile ${state} ${forceCorrect ? 'win' : 'bounce'}`;
+                tiles[i].dataset.state = states[i];
+                tiles[i].className = `tile ${states[i]} bounce`;
             }, i * 100);
         });
     }
 
+    // Two-pass Wordle logic for double letter filtering
     function getPattern(guess, target) {
         let res = Array(5).fill('absent');
         let targetArr = [...target];
@@ -184,41 +196,40 @@
 
     function handleNextGuess() {
         const row = document.getElementsByClassName('row')[currentRow];
-        if (!row) return;
         const tiles = Array.from(row.children);
-        const currentPattern = tiles.map(t => t.dataset.state === 'none' ? 'absent' : t.dataset.state).join('');
+        const currentPattern = tiles.map(t => t.dataset.state).join('');
 
         if (currentPattern === 'correctcorrectcorrectcorrectcorrect') {
             tiles.forEach((t, i) => setTimeout(() => t.classList.add('win'), i * 100));
             return;
         }
 
-        tiles.forEach((t, i) => { if(t.dataset.state === 'correct') confirmedLetters[i] = currentGuess[i]; });
-
+        // Filter based on pattern
         wordPool = wordPool.filter(w => getPattern(currentGuess, w) === currentPattern);
         document.getElementById('poolCount').innerText = wordPool.length;
 
         if (wordPool.length === 0) {
             row.classList.add('shake');
-            document.getElementById('debugMsg').innerText = "0 Possibilities left!";
             return;
         }
 
         currentRow++;
         if (currentRow < 6) {
-            let isWin = wordPool.length === 1;
-            let firstPossible = wordPool[0];
-            let matchingPath = treeData.find(path => path.includes(firstPossible));
-            let nextWord = (matchingPath && matchingPath[currentRow]) ? matchingPath[currentRow] : wordPool[0];
-            applyWord(currentRow, nextWord, isWin);
+            const firstInPool = wordPool[0];
+            const matchingPath = treeData.find(path => path.includes(firstInPool));
+            let nextWord = (matchingPath && matchingPath[currentRow]) ? matchingPath[currentRow] : firstInPool;
+            
+            // If only one word left, it's the winner
+            if (wordPool.length === 1) nextWord = wordPool[0];
+            
+            applyWord(currentRow, nextWord);
         }
     }
 
     function newGame() {
-        currentRow = 0; confirmedLetters.fill(null);
+        currentRow = 0;
         wordPool = [...originalWordPool];
         document.getElementById('poolCount').innerText = wordPool.length;
-        document.getElementById('debugMsg').innerText = "Game reset. Files retained.";
         init();
         if(treeData.length > 0) applyWord(0, treeData[0][0]);
     }
